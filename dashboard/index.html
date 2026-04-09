@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Dallas County Motivated Seller Leads</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f1117;color:#e2e8f0;min-height:100vh}
+  header{background:#0f1117;border-bottom:1px solid #1e2535;padding:18px 28px;display:flex;align-items:center;justify-content:space-between}
+  .logo{display:flex;align-items:center;gap:12px}
+  .logo-icon{width:36px;height:36px;background:linear-gradient(135deg,#3b5bdb,#7c3aed);border-radius:8px;display:flex;align-items:center;justify-content:center;font-size:18px}
+  .logo-text h1{font-size:18px;font-weight:600;color:#fff}
+  .logo-text p{font-size:12px;color:#64748b}
+  .meta{text-align:right;font-size:12px;color:#64748b}
+  .stats{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;padding:20px 28px}
+  .stat-card{background:#1a1f2e;border:1px solid #1e2535;border-radius:10px;padding:16px}
+  .stat-val{font-size:28px;font-weight:700;color:#6366f1}
+  .stat-label{font-size:11px;color:#64748b;text-transform:uppercase;letter-spacing:.05em;margin-top:4px}
+  .toolbar{padding:0 28px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+  .toolbar input,.toolbar select{background:#1a1f2e;border:1px solid #1e2535;color:#e2e8f0;padding:8px 12px;border-radius:7px;font-size:13px;outline:none}
+  .toolbar input{flex:1;min-width:200px}
+  .toolbar input::placeholder{color:#4a5568}
+  .btn{padding:8px 16px;border-radius:7px;border:none;cursor:pointer;font-size:13px;font-weight:500}
+  .btn-green{background:#16a34a;color:#fff}
+  .btn-blue{background:#1e40af;color:#fff}
+  .table-wrap{padding:0 28px 28px;overflow-x:auto}
+  table{width:100%;border-collapse:collapse;font-size:13px}
+  th{background:#1a1f2e;color:#94a3b8;font-weight:500;text-transform:uppercase;font-size:11px;letter-spacing:.05em;padding:10px 12px;text-align:left;border-bottom:1px solid #1e2535;cursor:pointer;white-space:nowrap}
+  th:hover{color:#e2e8f0}
+  td{padding:10px 12px;border-bottom:1px solid #1a1f2e;vertical-align:top}
+  tr:hover td{background:#1a1f2e}
+  .score-badge{display:inline-block;padding:2px 8px;border-radius:12px;font-weight:600;font-size:12px}
+  .score-high{background:#14532d;color:#4ade80}
+  .score-mid{background:#1e3a5f;color:#60a5fa}
+  .score-low{background:#1e2535;color:#94a3b8}
+  .cat-badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:500}
+  .cat-foreclosure{background:#450a0a;color:#f87171}
+  .cat-judgment{background:#1c1917;color:#fb923c}
+  .cat-lien{background:#1e1b4b;color:#a78bfa}
+  .cat-tax{background:#172554;color:#60a5fa}
+  .cat-probate{background:#14532d;color:#4ade80}
+  .cat-other{background:#1e2535;color:#94a3b8}
+  .flag{display:inline-block;background:#1e2535;color:#94a3b8;border-radius:3px;padding:1px 5px;font-size:10px;margin:1px}
+  .flag-hot{background:#450a0a;color:#f87171}
+  .pagination{display:flex;align-items:center;gap:8px;padding:0 28px 24px;font-size:13px;color:#64748b}
+  .page-btn{background:#1a1f2e;border:1px solid #1e2535;color:#e2e8f0;padding:5px 12px;border-radius:6px;cursor:pointer;font-size:13px}
+  .page-btn:disabled{opacity:.4;cursor:default}
+  a{color:#6366f1;text-decoration:none}
+  a:hover{text-decoration:underline}
+  .empty{text-align:center;padding:60px;color:#4a5568}
+  .empty-icon{font-size:40px;margin-bottom:12px}
+  @media(max-width:900px){.stats{grid-template-columns:repeat(3,1fr)}}
+  @media(max-width:600px){.stats{grid-template-columns:repeat(2,1fr)}.toolbar{flex-direction:column}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">🏠</div>
+    <div class="logo-text">
+      <h1>Dallas County Motivated Seller Leads</h1>
+      <p>Dallas County, TX — County Clerk</p>
+    </div>
+  </div>
+  <div class="meta">
+    <div id="updated"></div>
+    <div id="range"></div>
+  </div>
+</header>
+
+<div class="stats">
+  <div class="stat-card"><div class="stat-val" id="s-total">0</div><div class="stat-label">Total Leads</div></div>
+  <div class="stat-card"><div class="stat-val" id="s-addr">0</div><div class="stat-label">With Address</div></div>
+  <div class="stat-card"><div class="stat-val" id="s-score70">0</div><div class="stat-label">Score ≥ 70</div></div>
+  <div class="stat-card"><div class="stat-val" id="s-fc">0</div><div class="stat-label">Pre-Foreclosure</div></div>
+  <div class="stat-card"><div class="stat-val" id="s-lien">0</div><div class="stat-label">Tax / IRS Liens</div></div>
+  <div class="stat-card"><div class="stat-val" id="s-jud">0</div><div class="stat-label">Judgments</div></div>
+</div>
+
+<div class="toolbar">
+  <input type="text" id="search" placeholder="🔍  Search owner, address, doc #..."/>
+  <select id="f-type"><option value="">All Doc Types</option></select>
+  <select id="f-cat">
+    <option value="">All Categories</option>
+    <option value="foreclosure">Foreclosure</option>
+    <option value="judgment">Judgment</option>
+    <option value="lien">Lien</option>
+    <option value="tax">Tax</option>
+    <option value="probate">Probate</option>
+  </select>
+  <select id="f-score">
+    <option value="">All Scores</option>
+    <option value="70">Score ≥ 70</option>
+    <option value="50">Score ≥ 50</option>
+  </select>
+  <select id="f-addr">
+    <option value="">All Records</option>
+    <option value="1">With Address Only</option>
+  </select>
+  <button class="btn btn-green" onclick="downloadCSV()">⬇ GHL CSV</button>
+  <button class="btn btn-blue" onclick="downloadJSON()">⬇ JSON</button>
+</div>
+
+<div class="table-wrap">
+  <table id="tbl">
+    <thead>
+      <tr>
+        <th onclick="sortBy('score')">Score ↕</th>
+        <th onclick="sortBy('doc_type')">Type ↕</th>
+        <th onclick="sortBy('filed')">Filed ↕</th>
+        <th onclick="sortBy('owner')">Owner / Grantor ↕</th>
+        <th>Grantee</th>
+        <th onclick="sortBy('amount')">Amount ↕</th>
+        <th>Property Address</th>
+        <th>Mailing Address</th>
+        <th>Flags</th>
+        <th>Doc #</th>
+      </tr>
+    </thead>
+    <tbody id="tbody"></tbody>
+  </table>
+  <div class="empty" id="empty" style="display:none">
+    <div class="empty-icon">📭</div>
+    <div>No records match your filters.</div>
+  </div>
+</div>
+
+<div class="pagination">
+  <button class="page-btn" id="prev" onclick="changePage(-1)">← Prev</button>
+  <span id="page-info"></span>
+  <button class="page-btn" id="next" onclick="changePage(1)">Next →</button>
+</div>
+
+<script>
+let allRecords = [], filtered = [], sortCol = 'score', sortDir = -1, page = 1;
+const PER_PAGE = 50;
+
+async function load() {
+  try {
+    const r = await fetch('records.json?v=' + Date.now());
+    const d = await r.json();
+    allRecords = d.records || [];
+
+    document.getElementById('updated').textContent = 'Updated: ' + (d.fetched_at ? new Date(d.fetched_at).toLocaleString() : '—');
+    document.getElementById('range').textContent   = 'Range: ' + (d.date_range?.from || '') + ' – ' + (d.date_range?.to || '');
+
+    document.getElementById('s-total').textContent   = d.total || 0;
+    document.getElementById('s-addr').textContent    = d.with_address || 0;
+    document.getElementById('s-score70').textContent = allRecords.filter(r => r.score >= 70).length;
+    document.getElementById('s-fc').textContent      = allRecords.filter(r => r.cat === 'foreclosure').length;
+    document.getElementById('s-lien').textContent    = allRecords.filter(r => r.cat === 'lien' || r.cat === 'tax').length;
+    document.getElementById('s-jud').textContent     = allRecords.filter(r => r.cat === 'judgment').length;
+
+    // Populate doc type filter
+    const types = [...new Set(allRecords.map(r => r.doc_type).filter(Boolean))].sort();
+    const sel = document.getElementById('f-type');
+    types.forEach(t => { const o = document.createElement('option'); o.value = t; o.textContent = t; sel.appendChild(o); });
+
+    applyFilters();
+  } catch(e) {
+    console.error(e);
+    document.getElementById('empty').style.display = 'block';
+    document.getElementById('empty').innerHTML = '<div class="empty-icon">⚠️</div><div>Could not load records.json</div>';
+  }
+}
+
+function applyFilters() {
+  const q    = document.getElementById('search').value.toLowerCase();
+  const type = document.getElementById('f-type').value;
+  const cat  = document.getElementById('f-cat').value;
+  const sc   = parseInt(document.getElementById('f-score').value) || 0;
+  const addr = document.getElementById('f-addr').value;
+
+  filtered = allRecords.filter(r => {
+    if (type && r.doc_type !== type) return false;
+    if (cat  && r.cat      !== cat)  return false;
+    if (sc   && r.score    <  sc)    return false;
+    if (addr && !r.prop_address)     return false;
+    if (q) {
+      const hay = [r.owner,r.grantee,r.prop_address,r.mail_address,r.doc_num,r.doc_type].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+
+  filtered.sort((a,b) => {
+    let av = a[sortCol] ?? '', bv = b[sortCol] ?? '';
+    if (sortCol === 'score' || sortCol === 'amount') { av = parseFloat(av)||0; bv = parseFloat(bv)||0; }
+    return av < bv ? sortDir : av > bv ? -sortDir : 0;
+  });
+
+  page = 1;
+  render();
+}
+
+function sortBy(col) {
+  if (sortCol === col) sortDir *= -1; else { sortCol = col; sortDir = -1; }
+  applyFilters();
+}
+
+function render() {
+  const tbody = document.getElementById('tbody');
+  const start = (page-1)*PER_PAGE, end = start+PER_PAGE;
+  const rows  = filtered.slice(start, end);
+  const total = filtered.length, pages = Math.ceil(total/PER_PAGE)||1;
+
+  document.getElementById('empty').style.display = rows.length ? 'none' : 'block';
+  document.getElementById('page-info').textContent = `Page ${page} of ${pages} (${total} records)`;
+  document.getElementById('prev').disabled = page <= 1;
+  document.getElementById('next').disabled = page >= pages;
+
+  tbody.innerHTML = rows.map(r => {
+    const sc  = r.score || 0;
+    const scC = sc >= 70 ? 'score-high' : sc >= 50 ? 'score-mid' : 'score-low';
+    const catC = 'cat-' + (r.cat || 'other');
+    const flags = (r.flags||[]).map(f => {
+      const hot = ['Lis pendens','Pre-foreclosure','Judgment lien','Tax lien'].includes(f);
+      return `<span class="flag ${hot?'flag-hot':''}">${f}</span>`;
+    }).join('');
+    const propAddr = [r.prop_address, r.prop_city, r.prop_state, r.prop_zip].filter(Boolean).join(', ');
+    const mailAddr = [r.mail_address, r.mail_city, r.mail_state, r.mail_zip].filter(Boolean).join(', ');
+    const docLink  = r.clerk_url ? `<a href="${r.clerk_url}" target="_blank">${r.doc_num||'View'}</a>` : (r.doc_num||'—');
+    return `<tr>
+      <td><span class="score-badge ${scC}">${sc}</span></td>
+      <td><span class="cat-badge ${catC}">${r.cat_label||r.doc_type||'—'}</span></td>
+      <td style="white-space:nowrap">${r.filed||'—'}</td>
+      <td>${r.owner||'—'}</td>
+      <td>${r.grantee||'—'}</td>
+      <td>${r.amount||'—'}</td>
+      <td>${propAddr||'—'}</td>
+      <td>${mailAddr||'—'}</td>
+      <td>${flags||'—'}</td>
+      <td>${docLink}</td>
+    </tr>`;
+  }).join('');
+}
+
+function changePage(d) { page = Math.max(1, Math.min(Math.ceil(filtered.length/PER_PAGE), page+d)); render(); }
+
+function downloadCSV() {
+  const cols = ['First Name','Last Name','Mailing Address','Mailing City','Mailing State','Mailing Zip','Property Address','Property City','Property State','Property Zip','Lead Type','Document Type','Date Filed','Document Number','Amount/Debt Owed','Seller Score','Motivated Seller Flags','Source','Public Records URL'];
+  const rows = [cols.join(',')];
+  filtered.forEach(r => {
+    const p = (r.owner||'').trim().split(/\s+/,2);
+    rows.push([
+      p[0]||'', p[1]||'',
+      r.mail_address||'', r.mail_city||'', r.mail_state||'TX', r.mail_zip||'',
+      r.prop_address||'', r.prop_city||'Dallas', r.prop_state||'TX', r.prop_zip||'',
+      r.cat_label||'', r.doc_type||'', r.filed||'', r.doc_num||'',
+      r.amount||'', r.score||30, (r.flags||[]).join('; '),
+      'Dallas County Clerk', r.clerk_url||''
+    ].map(v => `"${String(v).replace(/"/g,'""')}"`).join(','));
+  });
+  dl(rows.join('\n'), 'dallas_leads.csv', 'text/csv');
+}
+
+function downloadJSON() { dl(JSON.stringify({records:filtered},null,2),'dallas_leads.json','application/json'); }
+
+function dl(content, name, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content],{type}));
+  a.download = name; a.click();
+}
+
+['search','f-type','f-cat','f-score','f-addr'].forEach(id =>
+  document.getElementById(id).addEventListener('input', applyFilters)
+);
+
+load();
+</script>
+</body>
+</html>
