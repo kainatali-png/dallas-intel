@@ -1,7 +1,10 @@
 {
-  "fetched_at": "",
-  "source": "Dallas County Clerk — Official Public Records",
-  "date_range": { "from": "", "to": "" },
+  "fetched_at": "2026-04-09T21:18:34.531278Z",
+  "source": "Dallas County Clerk \u2014 Official Public Records",
+  "date_range": {
+    "from": "04/02/2026",
+    "to": "04/09/2026"
+  },
   "total": 0,
   "with_address": 0,
   "records": []
