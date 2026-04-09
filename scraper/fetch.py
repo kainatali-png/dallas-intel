@@ -1,7 +1,6 @@
 """
 Dallas County, TX — Motivated Seller Lead Scraper
-Clerk Portal : https://dallas.tx.ds.search.govos.com/
-Parcel Data  : https://www.taxnetusa.com/data/
+Portal: https://dallas.tx.ds.search.govos.com/
 """
 
 from __future__ import annotations
@@ -36,12 +35,12 @@ except ImportError:
 
 # ─── CONFIG ───────────────────────────────────────────────────────────────────
 
-LOOKBACK_DAYS   = int(os.getenv("LOOKBACK_DAYS", "7"))
-CLERK_URL       = "https://dallas.tx.ds.search.govos.com/"
-PARCEL_URL      = "https://www.taxnetusa.com/data/"
-OUTPUT_PATHS    = [Path("dashboard/records.json"), Path("data/records.json")]
-GHL_CSV_PATH    = Path("data/ghl_export.csv")
-PARCEL_CACHE    = Path("/tmp/dallas_parcels.json")
+LOOKBACK_DAYS = int(os.getenv("LOOKBACK_DAYS", "7"))
+CLERK_URL     = "https://dallas.tx.ds.search.govos.com/"
+PARCEL_URL    = "https://www.taxnetusa.com/data/"
+OUTPUT_PATHS  = [Path("dashboard/records.json"), Path("data/records.json")]
+GHL_CSV_PATH  = Path("data/ghl_export.csv")
+PARCEL_CACHE  = Path("/tmp/dallas_parcels.json")
 
 logging.basicConfig(
     level=logging.INFO,
@@ -53,46 +52,40 @@ log = logging.getLogger("dallas_scraper")
 # ─── DOCUMENT TYPE MAPPING ────────────────────────────────────────────────────
 
 TARGET_DOC_TYPES: dict[str, dict] = {
-    # Foreclosure
-    "LP":      {"label": "Lis Pendens",              "cat": "foreclosure"},
-    "NOFC":    {"label": "Notice of Foreclosure",    "cat": "foreclosure"},
-    "RELLP":   {"label": "Release Lis Pendens",      "cat": "foreclosure"},
-    # Tax
-    "TAXDEED": {"label": "Tax Deed",                 "cat": "tax"},
-    # Judgments
-    "JUD":     {"label": "Judgment",                 "cat": "judgment"},
-    "CCJ":     {"label": "Certified Judgment",       "cat": "judgment"},
-    "DRJUD":   {"label": "Domestic Judgment",        "cat": "judgment"},
-    # Liens
-    "LNCORPTX":{"label": "Corp Tax Lien",            "cat": "lien"},
-    "LNIRS":   {"label": "IRS Lien",                 "cat": "lien"},
-    "LNFED":   {"label": "Federal Lien",             "cat": "lien"},
-    "LN":      {"label": "Lien",                     "cat": "lien"},
-    "LNMECH":  {"label": "Mechanic Lien",            "cat": "lien"},
-    "LNHOA":   {"label": "HOA Lien",                 "cat": "lien"},
-    "MEDLN":   {"label": "Medicaid Lien",            "cat": "lien"},
-    # Other
-    "PRO":     {"label": "Probate Document",         "cat": "probate"},
-    "NOC":     {"label": "Notice of Commencement",   "cat": "other"},
+    "LP":       {"label": "Lis Pendens",             "cat": "foreclosure"},
+    "NOFC":     {"label": "Notice of Foreclosure",   "cat": "foreclosure"},
+    "RELLP":    {"label": "Release Lis Pendens",     "cat": "foreclosure"},
+    "TAXDEED":  {"label": "Tax Deed",                "cat": "tax"},
+    "JUD":      {"label": "Judgment",                "cat": "judgment"},
+    "CCJ":      {"label": "Certified Judgment",      "cat": "judgment"},
+    "DRJUD":    {"label": "Domestic Judgment",       "cat": "judgment"},
+    "LNCORPTX": {"label": "Corp Tax Lien",           "cat": "lien"},
+    "LNIRS":    {"label": "IRS Lien",                "cat": "lien"},
+    "LNFED":    {"label": "Federal Lien",            "cat": "lien"},
+    "LN":       {"label": "Lien",                    "cat": "lien"},
+    "LNMECH":   {"label": "Mechanic Lien",           "cat": "lien"},
+    "LNHOA":    {"label": "HOA Lien",                "cat": "lien"},
+    "MEDLN":    {"label": "Medicaid Lien",           "cat": "lien"},
+    "PRO":      {"label": "Probate Document",        "cat": "probate"},
+    "NOC":      {"label": "Notice of Commencement",  "cat": "other"},
 }
 
-# Also match by partial/fuzzy label from the site
 LABEL_FUZZY: dict[str, str] = {
-    "LIS PENDENS":            "LP",
-    "NOTICE OF FORECLOSURE":  "NOFC",
-    "RELEASE LIS PENDENS":    "RELLP",
-    "TAX DEED":               "TAXDEED",
-    "JUDGMENT":               "JUD",
-    "CERTIFIED JUDGMENT":     "CCJ",
-    "DOMESTIC":               "DRJUD",
-    "CORP TAX":               "LNCORPTX",
-    "IRS":                    "LNIRS",
-    "FEDERAL LIEN":           "LNFED",
-    "MECHANIC":               "LNMECH",
-    "HOA":                    "LNHOA",
-    "MEDICAID":               "MEDLN",
-    "PROBATE":                "PRO",
-    "COMMENCEMENT":           "NOC",
+    "LIS PENDENS":           "LP",
+    "NOTICE OF FORECLOSURE": "NOFC",
+    "RELEASE LIS PENDENS":   "RELLP",
+    "TAX DEED":              "TAXDEED",
+    "JUDGMENT":              "JUD",
+    "CERTIFIED JUDGMENT":    "CCJ",
+    "DOMESTIC":              "DRJUD",
+    "CORP TAX":              "LNCORPTX",
+    "IRS":                   "LNIRS",
+    "FEDERAL LIEN":          "LNFED",
+    "MECHANIC":              "LNMECH",
+    "HOA":                   "LNHOA",
+    "MEDICAID":              "MEDLN",
+    "PROBATE":               "PRO",
+    "COMMENCEMENT":          "NOC",
 }
 
 GHL_COLUMNS = [
@@ -103,18 +96,11 @@ GHL_COLUMNS = [
     "Motivated Seller Flags", "Source", "Public Records URL",
 ]
 
-# ─── STEALTH JS ───────────────────────────────────────────────────────────────
-
 STEALTH_JS = """
 () => {
     Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
-    Object.defineProperty(navigator, 'plugins', { get: () => [1, 2, 3, 4, 5] });
-    Object.defineProperty(navigator, 'languages', { get: () => ['en-US', 'en'] });
-    const orig = window.navigator.permissions.query;
-    window.navigator.permissions.query = (p) =>
-        p.name === 'notifications'
-            ? Promise.resolve({ state: Notification.permission })
-            : orig(p);
+    Object.defineProperty(navigator, 'plugins',   { get: () => [1,2,3,4,5] });
+    Object.defineProperty(navigator, 'languages', { get: () => ['en-US','en'] });
 }
 """
 
@@ -122,11 +108,10 @@ STEALTH_JS = """
 
 def compute_score(rec: dict) -> tuple[list[str], int]:
     flags: list[str] = []
-    cat    = rec.get("cat", "")
-    code   = rec.get("doc_type", "")
-    amount = _parse_amount(rec.get("amount", ""))
+    cat  = rec.get("cat", "")
+    code = rec.get("doc_type", "")
 
-    if cat == "foreclosure" and code not in ("RELLP",):
+    if cat == "foreclosure" and code != "RELLP":
         flags.append("Lis pendens")
     if code == "NOFC":
         flags.append("Pre-foreclosure")
@@ -151,18 +136,15 @@ def compute_score(rec: dict) -> tuple[list[str], int]:
         pass
 
     score = 30
-    core_flags = [f for f in flags if f not in ("New this week", "LLC / corp owner")]
-    score += 10 * len(core_flags)
-
-    # LP + FC combo bonus
+    core  = [f for f in flags if f not in ("New this week", "LLC / corp owner")]
+    score += 10 * len(core)
     if "Lis pendens" in flags and "Pre-foreclosure" in flags:
         score += 20
-
+    amount = _parse_amount(rec.get("amount", ""))
     if amount and amount > 100_000:
         score += 15
     elif amount and amount > 50_000:
         score += 10
-
     if "New this week" in flags:
         score += 5
     if rec.get("prop_address"):
@@ -175,148 +157,93 @@ def compute_score(rec: dict) -> tuple[list[str], int]:
 def _parse_amount(raw: str) -> Optional[float]:
     if not raw:
         return None
-    cleaned = re.sub(r"[^\d.]", "", raw)
     try:
-        return float(cleaned)
+        return float(re.sub(r"[^\d.]", "", raw))
     except ValueError:
         return None
 
 
-def _match_doc_type(raw_type: str) -> Optional[dict]:
-    """Match a raw doc type string to our TARGET_DOC_TYPES."""
-    upper = raw_type.upper().strip()
-
-    # Exact code match first
+def _match_doc_type(raw: str) -> Optional[dict]:
+    upper = raw.upper().strip()
     if upper in TARGET_DOC_TYPES:
         return {"code": upper, **TARGET_DOC_TYPES[upper]}
-
-    # Fuzzy label match
-    for label_fragment, code in LABEL_FUZZY.items():
-        if label_fragment in upper:
+    for fragment, code in LABEL_FUZZY.items():
+        if fragment in upper:
             return {"code": code, **TARGET_DOC_TYPES[code]}
-
     return None
 
 
 # ─── PARCEL LOOKUP ────────────────────────────────────────────────────────────
 
 class ParcelLookup:
-    """Downloads Dallas County bulk parcel DBF and builds owner→address lookup."""
-
     def __init__(self):
         self._index: dict[str, dict] = {}
 
     def load(self) -> int:
-        # Try cached version first
         if PARCEL_CACHE.exists():
             age = time.time() - PARCEL_CACHE.stat().st_mtime
-            if age < 86400:  # 24 hours
+            if age < 86400:
                 log.info("Loading parcels from cache...")
                 self._index = json.loads(PARCEL_CACHE.read_text())
-                log.info("Loaded %d parcels from cache", len(self._index))
+                log.info("Cached parcels: %d", len(self._index))
                 return len(self._index)
 
         log.info("Downloading parcel data from TaxNetUSA...")
-        dbf_bytes = self._download_dbf()
-        if not dbf_bytes:
-            log.warning("Could not download parcel data — addresses will be empty")
+        data = self._download()
+        if not data:
+            log.warning("Parcel download failed — addresses will be empty")
             return 0
-
-        count = self._parse_dbf(dbf_bytes)
+        count = self._parse(data)
         PARCEL_CACHE.write_text(json.dumps(self._index))
-        log.info("Parcel index built: %d records", count)
+        log.info("Parcel index: %d records", count)
         return count
 
-    def _download_dbf(self) -> Optional[bytes]:
-        """Try to download Dallas County parcel DBF from TaxNetUSA."""
-        session = requests.Session()
-        session.headers.update({
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/124.0.0.0 Safari/537.36"
-            ),
-            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-        })
-
+    def _download(self) -> Optional[bytes]:
+        s = requests.Session()
+        s.headers["User-Agent"] = (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+            "AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+        )
         for attempt in range(3):
             try:
-                resp = session.get(PARCEL_URL, timeout=30)
-                resp.raise_for_status()
-                soup = BeautifulSoup(resp.text, "lxml")
-
-                # Look for Dallas County download link
+                r = s.get(PARCEL_URL, timeout=30)
+                r.raise_for_status()
+                soup = BeautifulSoup(r.text, "lxml")
                 for a in soup.find_all("a", href=True):
-                    href = a["href"]
                     text = a.get_text(strip=True).upper()
-                    if "DALLAS" in text and ("DBF" in text or "ZIP" in href.upper() or "DBF" in href.upper()):
-                        dl_url = href if href.startswith("http") else f"https://www.taxnetusa.com{href}"
-                        log.info("Found Dallas parcel link: %s", dl_url)
-                        dl_resp = session.get(dl_url, timeout=120, stream=True)
-                        dl_resp.raise_for_status()
-                        return dl_resp.content
-
-                # Try __doPostBack for dynamic pages
-                viewstate = ""
-                vs_input = soup.find("input", {"name": "__VIEWSTATE"})
-                if vs_input:
-                    viewstate = vs_input.get("value", "")
-
-                eventval = ""
-                for a in soup.find_all("a", href=True):
                     href = a["href"]
-                    if "__doPostBack" in href and "DALLAS" in a.get_text(strip=True).upper():
-                        match = re.search(r"__doPostBack\('([^']+)','([^']*)'\)", href)
-                        if match:
-                            post_data = {
-                                "__EVENTTARGET":   match.group(1),
-                                "__EVENTARGUMENT": match.group(2),
-                                "__VIEWSTATE":     viewstate,
-                            }
-                            pb_resp = session.post(PARCEL_URL, data=post_data, timeout=120)
-                            pb_resp.raise_for_status()
-                            return pb_resp.content
-
-                log.warning("Attempt %d: No Dallas parcel link found", attempt + 1)
-
+                    if "DALLAS" in text and any(x in href.upper() for x in ["DBF", "ZIP", "DATA"]):
+                        url = href if href.startswith("http") else f"https://www.taxnetusa.com{href}"
+                        log.info("Downloading parcel file: %s", url)
+                        dl = s.get(url, timeout=120)
+                        dl.raise_for_status()
+                        return dl.content
+                log.warning("Attempt %d: No Dallas link found on TaxNetUSA", attempt + 1)
             except Exception as e:
-                log.warning("Parcel download attempt %d failed: %s", attempt + 1, e)
+                log.warning("Parcel attempt %d: %s", attempt + 1, e)
                 time.sleep(2 ** attempt)
-
         return None
 
-    def _parse_dbf(self, data: bytes) -> int:
-        """Parse DBF bytes (possibly zipped) into owner index."""
+    def _parse(self, data: bytes) -> int:
         try:
-            # Try ZIP first
+            raw = data
             if data[:2] == b"PK":
                 with zipfile.ZipFile(io.BytesIO(data)) as zf:
-                    dbf_names = [n for n in zf.namelist() if n.upper().endswith(".DBF")]
-                    if not dbf_names:
-                        log.warning("No DBF file found in ZIP")
+                    names = [n for n in zf.namelist() if n.upper().endswith(".DBF")]
+                    if not names:
                         return 0
-                    dbf_bytes = zf.read(dbf_names[0])
-            else:
-                dbf_bytes = data
-
-            # Write to temp file (dbfread needs a file path)
+                    raw = zf.read(names[0])
             tmp = Path("/tmp/dallas_parcels.dbf")
-            tmp.write_bytes(dbf_bytes)
-
-            table = DBF(str(tmp), encoding="latin-1", ignore_missing_memofile=True)
+            tmp.write_bytes(raw)
             count = 0
-
-            for rec in table:
+            for rec in DBF(str(tmp), encoding="latin-1", ignore_missing_memofile=True):
                 try:
-                    owner = (
-                        str(rec.get("OWNER") or rec.get("OWN1") or "").strip().upper()
-                    )
+                    owner = str(rec.get("OWNER") or rec.get("OWN1") or "").strip().upper()
                     if not owner:
                         continue
-
                     entry = {
                         "prop_address": str(rec.get("SITE_ADDR") or rec.get("SITEADDR") or "").strip(),
-                        "prop_city":    str(rec.get("SITE_CITY") or "").strip() or "Dallas",
+                        "prop_city":    str(rec.get("SITE_CITY") or "Dallas").strip(),
                         "prop_state":   "TX",
                         "prop_zip":     str(rec.get("SITE_ZIP") or "").strip(),
                         "mail_address": str(rec.get("ADDR_1") or rec.get("MAILADR1") or "").strip(),
@@ -324,37 +251,30 @@ class ParcelLookup:
                         "mail_state":   str(rec.get("STATE") or "TX").strip(),
                         "mail_zip":     str(rec.get("ZIP") or rec.get("MAILZIP") or "").strip(),
                     }
-
-                    # Index by multiple name formats
                     parts = owner.split()
+                    keys = [owner]
                     if len(parts) >= 2:
-                        first_last = f"{parts[0]} {' '.join(parts[1:])}"
-                        last_first = f"{parts[-1]} {' '.join(parts[:-1])}"
-                        last_comma = f"{parts[-1]}, {' '.join(parts[:-1])}"
-                        for key in [owner, first_last, last_first, last_comma]:
-                            self._index.setdefault(key, entry)
-                    else:
-                        self._index[owner] = entry
-
+                        keys += [
+                            f"{parts[0]} {' '.join(parts[1:])}",
+                            f"{parts[-1]} {' '.join(parts[:-1])}",
+                            f"{parts[-1]}, {' '.join(parts[:-1])}",
+                        ]
+                    for k in keys:
+                        self._index.setdefault(k, entry)
                     count += 1
                 except Exception:
                     continue
-
             return count
-
         except Exception as e:
             log.error("DBF parse error: %s", e)
             return 0
 
-    def lookup(self, owner_name: str) -> dict:
-        """Return address data for owner, or empty dict."""
-        if not owner_name:
+    def lookup(self, owner: str) -> dict:
+        if not owner:
             return {}
-        key = owner_name.strip().upper()
-        result = self._index.get(key, {})
-        if result:
-            return result
-        # Try last name only
+        key = owner.strip().upper()
+        if key in self._index:
+            return self._index[key]
         parts = key.split()
         if parts:
             for k, v in self._index.items():
@@ -366,139 +286,95 @@ class ParcelLookup:
 # ─── CLERK SCRAPER ────────────────────────────────────────────────────────────
 
 class ClerkScraper:
-    """Scrapes Dallas County clerk portal via Playwright."""
 
     BASE = "https://dallas.tx.ds.search.govos.com"
 
     async def fetch_all(self, date_from: str, date_to: str) -> list[dict]:
         records: list[dict] = []
-
         async with async_playwright() as pw:
             browser = await pw.chromium.launch(
                 headless=True,
-                args=[
-                    "--no-sandbox",
-                    "--disable-dev-shm-usage",
-                    "--disable-blink-features=AutomationControlled",
-                    "--disable-infobars",
-                ],
+                args=["--no-sandbox", "--disable-dev-shm-usage",
+                      "--disable-blink-features=AutomationControlled"],
             )
-            context = await browser.new_context(
+            ctx = await browser.new_context(
                 user_agent=(
                     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
                     "AppleWebKit/537.36 (KHTML, like Gecko) "
                     "Chrome/124.0.0.0 Safari/537.36"
                 ),
                 viewport={"width": 1366, "height": 768},
-                extra_http_headers={
-                    "Accept-Language": "en-US,en;q=0.9",
-                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-                },
+                extra_http_headers={"Accept-Language": "en-US,en;q=0.9"},
             )
-            await context.add_init_script(STEALTH_JS)
-            page = await context.new_page()
-
+            await ctx.add_init_script(STEALTH_JS)
+            page = await ctx.new_page()
             try:
                 records = await self._scrape(page, date_from, date_to)
             except Exception as e:
-                log.error("Clerk scraper fatal error: %s", e)
-                import traceback
-                log.error(traceback.format_exc())
-                try:
-                    await page.screenshot(path="/tmp/fatal_error.png")
-                except Exception:
-                    pass
+                log.error("Fatal scraper error: %s", e)
+                import traceback; log.error(traceback.format_exc())
+                try: await page.screenshot(path="/tmp/fatal.png")
+                except Exception: pass
             finally:
                 await browser.close()
-
         return records
 
     async def _scrape(self, page, date_from: str, date_to: str) -> list[dict]:
         records: list[dict] = []
 
-        log.info("Loading clerk portal: %s", CLERK_URL)
+        # ── Load portal ──
+        log.info("Loading portal: %s", CLERK_URL)
         await page.goto(CLERK_URL, wait_until="domcontentloaded", timeout=60_000)
         await page.wait_for_timeout(4000)
 
-        title = await page.title()
-        log.info("Portal title: %s", title)
-        await page.screenshot(path="/tmp/clerk_home.png")
-
-        # Navigate to document search
-        search_url = await self._find_search_url(page)
-        if search_url and search_url != page.url:
-            log.info("Navigating to search: %s", search_url)
-            await page.goto(search_url, wait_until="domcontentloaded", timeout=60_000)
-            await page.wait_for_timeout(3000)
-
-        # Try to interact with the search form
-        form_found = await self._fill_search_form(page, date_from, date_to)
-        if not form_found:
-            log.warning("Search form not found — trying direct URL approach")
-            records = await self._try_direct_search(page, date_from, date_to)
-            return records
-
-        await page.screenshot(path="/tmp/clerk_results.png")
-
-        # Parse all result pages
-        page_num = 1
-        while True:
-            html = await page.content()
-            page_records = self._parse_results_page(html)
-            records.extend(page_records)
-            log.info("Page %d: %d records (total so far: %d)", page_num, len(page_records), len(records))
-
-            if not page_records:
+        # Dismiss any popup/tour
+        for sel in ['button:has-text("Close")', 'button:has-text("No")',
+                    '[aria-label="Close"]', '.close', 'button:has-text("Dismiss")']:
+            try:
+                await page.click(sel, timeout=2000)
+                log.info("Dismissed popup: %s", sel)
                 break
+            except Exception:
+                pass
 
-            # Try next page
-            has_next = await self._go_next_page(page)
-            if not has_next:
-                break
-            page_num += 1
-            await page.wait_for_timeout(1500)
+        await page.screenshot(path="/tmp/portal_home.png")
+        log.info("Page title: %s", await page.title())
 
-        return records
-
-    async def _find_search_url(self, page) -> Optional[str]:
-        """Find the document search link on the portal home page."""
+        # ── Click Advanced Search ──
+        log.info("Looking for Advanced Search link...")
+        clicked_advanced = False
         for sel in [
-            'a:has-text("Document Search")',
-            'a:has-text("Search Records")',
-            'a:has-text("Official Records")',
-            'a:has-text("Search")',
-            'a[href*="search"]',
+            'a:has-text("Advanced Search")',
+            'span:has-text("Advanced Search")',
+            'button:has-text("Advanced")',
+            'a[href*="advanced" i]',
         ]:
             try:
-                el = await page.query_selector(sel)
-                if el:
-                    href = await el.get_attribute("href")
-                    if href:
-                        return href if href.startswith("http") else f"{self.BASE}{href}"
+                await page.click(sel, timeout=5000)
+                await page.wait_for_timeout(3000)
+                log.info("Clicked Advanced Search via: %s", sel)
+                clicked_advanced = True
+                break
             except Exception:
                 pass
 
-        # Log all links for debugging
-        links = await page.query_selector_all("a[href]")
-        log.info("Found %d links on home page:", len(links))
-        for lnk in links[:20]:
-            try:
-                href = await lnk.get_attribute("href") or ""
-                text = (await lnk.inner_text()).strip()[:60]
-                log.info("  Link: %s → %s", text, href)
-            except Exception:
-                pass
+        if not clicked_advanced:
+            log.warning("Could not click Advanced Search — logging all links")
+            links = await page.query_selector_all("a, button")
+            for lnk in links[:30]:
+                try:
+                    txt = (await lnk.inner_text()).strip()
+                    href = await lnk.get_attribute("href") or ""
+                    log.info("  element: '%s' href=%s", txt[:60], href[:60])
+                except Exception:
+                    pass
 
-        return None
+        await page.screenshot(path="/tmp/advanced_search.png")
 
-    async def _fill_search_form(self, page, date_from: str, date_to: str) -> bool:
-        """Fill and submit the date range search form."""
-        await page.wait_for_timeout(3000)
-
-        # Log all form elements
+        # ── Log all form elements ──
         all_inputs = await page.query_selector_all("input, select, textarea")
         log.info("Form elements found: %d", len(all_inputs))
-        for el in all_inputs[:30]:
+        for el in all_inputs[:40]:
             try:
                 t = await el.get_attribute("type") or "?"
                 i = await el.get_attribute("id") or ""
@@ -508,179 +384,271 @@ class ClerkScraper:
             except Exception:
                 pass
 
-        filled = False
+        # ── Set date range ──
+        # Format needed: M/D/YYYY (e.g. 4/2/2026)
+        dt_from = datetime.strptime(date_from, "%m/%d/%Y")
+        dt_to   = datetime.strptime(date_to,   "%m/%d/%Y")
+        fmt_from = f"{dt_from.month}/{dt_from.day}/{dt_from.year}"
+        fmt_to   = f"{dt_to.month}/{dt_to.day}/{dt_to.year}"
+        log.info("Setting date range: %s → %s", fmt_from, fmt_to)
 
-        # Try date range fields
-        date_selectors = [
-            ('#dateFrom', '#dateTo'),
-            ('#startDate', '#endDate'),
-            ('#beginDate', '#endDate'),
-            ('input[name="dateFrom"]', 'input[name="dateTo"]'),
-            ('input[name="startDate"]', 'input[name="endDate"]'),
-            ('input[placeholder*="MM/DD" i]', None),
-        ]
+        date_filled = False
 
-        for from_sel, to_sel in date_selectors:
+        # Try by placeholder pattern (the screenshot shows M/D/YYYY style dates)
+        for sel_pair in [
+            ("#dateRangeStart", "#dateRangeEnd"),
+            ("#startDate",      "#endDate"),
+            ("#fromDate",       "#toDate"),
+            ('[placeholder*="start" i]', '[placeholder*="end" i]'),
+            ('[placeholder*="from" i]',  '[placeholder*="to" i]'),
+        ]:
             try:
-                from_el = await page.query_selector(from_sel)
-                if not from_el:
-                    continue
+                s, e = sel_pair
+                start_el = await page.query_selector(s)
+                end_el   = await page.query_selector(e)
+                if start_el and end_el:
+                    # Clear and type into date range fields
+                    await start_el.triple_click()
+                    await start_el.type(fmt_from, delay=60)
+                    await page.wait_for_timeout(300)
+                    await end_el.triple_click()
+                    await end_el.type(fmt_to, delay=60)
+                    log.info("Filled dates via selectors: %s / %s", s, e)
+                    date_filled = True
+                    break
+            except Exception:
+                pass
 
-                await from_el.click()
-                await from_el.fill("")
-                await from_el.type(date_from, delay=60)
-                log.info("Filled start date via: %s", from_sel)
+        # GovOS date range — often rendered as two inputs side by side
+        if not date_filled:
+            date_inputs = await page.query_selector_all('input[type="text"], input[type="date"], input:not([type])')
+            log.info("Fallback: found %d generic inputs", len(date_inputs))
+            # Find the two that look like date fields (contain "/" or are near "Date Range" label)
+            date_like = []
+            for el in date_inputs:
+                try:
+                    val = await el.get_attribute("value") or ""
+                    ph  = await el.get_attribute("placeholder") or ""
+                    if "/" in val or "/" in ph or "date" in ph.lower():
+                        date_like.append(el)
+                except Exception:
+                    pass
+            log.info("Date-like inputs found: %d", len(date_like))
+            if len(date_like) >= 2:
+                await date_like[0].triple_click()
+                await date_like[0].type(fmt_from, delay=60)
+                await page.wait_for_timeout(300)
+                await date_like[1].triple_click()
+                await date_like[1].type(fmt_to, delay=60)
+                date_filled = True
+                log.info("Filled dates via date-like fallback")
 
-                if to_sel:
-                    to_el = await page.query_selector(to_sel)
-                    if to_el:
-                        await to_el.click()
-                        await to_el.fill("")
-                        await to_el.type(date_to, delay=60)
-                        log.info("Filled end date via: %s", to_sel)
-                else:
-                    # Two MM/DD inputs — fill second one
-                    date_inputs = await page.query_selector_all('input[placeholder*="MM/DD" i]')
-                    if len(date_inputs) >= 2:
-                        await date_inputs[1].click()
-                        await date_inputs[1].fill("")
-                        await date_inputs[1].type(date_to, delay=60)
+        if not date_filled:
+            log.warning("Could not fill date fields — will try document type search only")
 
-                filled = True
+        # ── Select doc types ──
+        # Try selecting each target doc type from a dropdown or checkbox list
+        await self._select_doc_types(page)
+        await page.wait_for_timeout(500)
+
+        # ── Submit search ──
+        submitted = False
+        for sel in [
+            'button:has-text("Search")',
+            'input[type="submit"]',
+            '#searchBtn',
+            '#btnSearch',
+            'button[type="submit"]',
+            '.search-btn',
+        ]:
+            try:
+                await page.click(sel, timeout=5000)
+                await page.wait_for_load_state("networkidle", timeout=30_000)
+                await page.wait_for_timeout(3000)
+                log.info("Submitted search via: %s", sel)
+                submitted = True
                 break
             except Exception:
                 pass
 
-        if not filled:
-            log.warning("Could not fill date fields")
-            return False
+        if not submitted:
+            log.warning("Could not submit search form")
+            await page.screenshot(path="/tmp/submit_failed.png")
+            return records
 
-        await page.wait_for_timeout(500)
+        await page.screenshot(path="/tmp/results.png")
 
-        # Submit
-        for sel in [
-            'button[type="submit"]',
-            'input[type="submit"]',
-            'button:has-text("Search")',
-            'a:has-text("Search")',
-            '#btnSearch',
-            '#searchBtn',
-        ]:
-            try:
-                await page.click(sel, timeout=3000)
-                await page.wait_for_load_state("networkidle", timeout=30_000)
-                log.info("Submitted search via: %s", sel)
-                return True
-            except Exception:
-                pass
+        # ── Collect results across all pages ──
+        page_num = 1
+        while True:
+            html = await page.content()
+            page_records = self._parse_results(html)
 
-        # Try F2 as last resort
-        await page.keyboard.press("F2")
-        await page.wait_for_timeout(3000)
-        return True
+            # Also try React/JSON results
+            if not page_records:
+                page_records = await self._extract_react_results(page)
 
-    async def _try_direct_search(self, page, date_from: str, date_to: str) -> list[dict]:
-        """Try common URL patterns for date-range document search."""
-        records: list[dict] = []
+            records.extend(page_records)
+            log.info("Page %d: %d records (total: %d)", page_num, len(page_records), len(records))
 
-        # GovOS / iDocMarket common patterns
-        url_patterns = [
-            f"{self.BASE}/search/index?RecordedDateFrom={date_from}&RecordedDateTo={date_to}",
-            f"{self.BASE}/search/index?startDate={date_from}&endDate={date_to}",
-            f"{self.BASE}/api/search?dateFrom={date_from}&dateTo={date_to}&county=dallas",
-        ]
+            if not page_records:
+                break
 
-        for url in url_patterns:
-            try:
-                log.info("Trying direct URL: %s", url)
-                await page.goto(url, wait_until="domcontentloaded", timeout=30_000)
-                await page.wait_for_timeout(3000)
-                html = await page.content()
-                if len(html) > 5000:
-                    found = self._parse_results_page(html)
-                    if found:
-                        records.extend(found)
-                        log.info("Direct URL found %d records", len(found))
-                        break
-            except Exception as e:
-                log.warning("Direct URL failed: %s", e)
+            has_next = await self._next_page(page)
+            if not has_next:
+                break
+            page_num += 1
+            await page.wait_for_timeout(2000)
 
         return records
 
-    async def _go_next_page(self, page) -> bool:
-        """Click the Next button if available."""
+    async def _select_doc_types(self, page):
+        """Try to select target document types in the search form."""
+        # Look for a doc type dropdown
         for sel in [
-            'a:has-text("Next")',
-            'a:has-text(">")',
-            'input[value="Next"]',
-            'button:has-text("Next")',
-            '[aria-label="Next page"]',
-            '.pagination a:last-child',
+            'select[name*="type" i]',
+            'select[id*="type" i]',
+            'select[name*="doc" i]',
+            '#docType',
+            '#documentType',
+            '#instrumentType',
         ]:
             try:
-                btn = await page.query_selector(sel)
-                if btn:
-                    is_disabled = await btn.get_attribute("disabled")
-                    classes = await btn.get_attribute("class") or ""
-                    if is_disabled or "disabled" in classes:
-                        return False
-                    await btn.click(timeout=10_000)
-                    await page.wait_for_load_state("networkidle", timeout=30_000)
-                    await page.wait_for_timeout(1000)
-                    return True
+                el = await page.query_selector(sel)
+                if el:
+                    options = await el.query_selector_all("option")
+                    log.info("Doc type dropdown found with %d options", len(options))
+                    for opt in options:
+                        val  = await opt.get_attribute("value") or ""
+                        text = (await opt.inner_text()).strip().upper()
+                        meta = _match_doc_type(text) or _match_doc_type(val)
+                        if meta:
+                            await page.select_option(sel, value=val)
+                            log.info("Selected doc type: %s", text)
+                    return
             except Exception:
                 pass
-        return False
 
-    def _parse_results_page(self, html: str) -> list[dict]:
-        """Parse a results page and return matching records."""
-        soup = BeautifulSoup(html, "lxml")
+        # Look for checkboxes
+        checkboxes = await page.query_selector_all('input[type="checkbox"]')
+        log.info("Checkboxes found: %d", len(checkboxes))
+        for cb in checkboxes:
+            try:
+                label = await cb.get_attribute("aria-label") or ""
+                name  = await cb.get_attribute("name") or ""
+                val   = await cb.get_attribute("value") or ""
+                meta  = _match_doc_type(label) or _match_doc_type(name) or _match_doc_type(val)
+                if meta:
+                    is_checked = await cb.is_checked()
+                    if not is_checked:
+                        await cb.click()
+                        log.info("Checked: %s", label or name or val)
+            except Exception:
+                pass
+
+    async def _extract_react_results(self, page) -> list[dict]:
+        """Extract results from React-rendered DOM by reading result cards/rows."""
         records: list[dict] = []
+        try:
+            # GovOS/Neuo portals often render results as card elements
+            result_items = await page.query_selector_all(
+                '[class*="result" i], [class*="record" i], [class*="item" i], '
+                '[data-testid*="result" i], [data-testid*="record" i]'
+            )
+            log.info("React result items found: %d", len(result_items))
 
-        # Find results table
-        results_table = None
+            for item in result_items:
+                try:
+                    text = await item.inner_text()
+                    lines = [l.strip() for l in text.split("\n") if l.strip()]
+                    if len(lines) < 2:
+                        continue
+
+                    # Try to find doc type in the text
+                    full_text = " ".join(lines).upper()
+                    meta = None
+                    for line in lines:
+                        meta = _match_doc_type(line)
+                        if meta:
+                            break
+                    if not meta:
+                        continue
+
+                    # Extract URL
+                    clerk_url = self.BASE
+                    a_tags = await item.query_selector_all("a[href]")
+                    for a in a_tags:
+                        href = await a.get_attribute("href") or ""
+                        if href:
+                            clerk_url = href if href.startswith("http") else f"{self.BASE}{href}"
+                            break
+
+                    records.append({
+                        "doc_num":      lines[0] if lines else "",
+                        "doc_type":     meta["code"],
+                        "filed":        self._extract_date(full_text),
+                        "cat":          meta["cat"],
+                        "cat_label":    meta["label"],
+                        "owner":        self._extract_name(lines, "grantor"),
+                        "grantee":      self._extract_name(lines, "grantee"),
+                        "amount":       self._extract_amount(full_text),
+                        "legal":        "",
+                        "clerk_url":    clerk_url,
+                        "prop_address": "", "prop_city": "Dallas",
+                        "prop_state":   "TX", "prop_zip": "",
+                        "mail_address": "", "mail_city": "",
+                        "mail_state":   "TX", "mail_zip": "",
+                    })
+                except Exception:
+                    continue
+        except Exception as e:
+            log.warning("React extraction error: %s", e)
+        return records
+
+    def _extract_date(self, text: str) -> str:
+        m = re.search(r"\b(\d{1,2}/\d{1,2}/\d{4})\b", text)
+        return m.group(1) if m else ""
+
+    def _extract_amount(self, text: str) -> str:
+        m = re.search(r"\$[\d,]+\.?\d*", text)
+        return m.group(0) if m else ""
+
+    def _extract_name(self, lines: list[str], role: str) -> str:
+        for i, line in enumerate(lines):
+            if role.lower() in line.lower() and i + 1 < len(lines):
+                return lines[i + 1]
+        return lines[1] if len(lines) > 1 else ""
+
+    def _parse_results(self, html: str) -> list[dict]:
+        """Parse HTML table results."""
+        soup    = BeautifulSoup(html, "lxml")
+        records = []
+        table   = None
+
         for tbl in soup.find_all("table"):
             headers = [th.get_text(strip=True).lower() for th in tbl.find_all("th")]
-            text    = tbl.get_text().lower()
-            if any(h in headers for h in ["grantor", "grantee", "instrument", "type", "recorded", "filed"]):
-                results_table = tbl
-                log.info("Results table headers: %s", headers)
-                break
-            if "grantor" in text and "grantee" in text and len(tbl.find_all("tr")) > 2:
-                results_table = tbl
+            if any(h in headers for h in ["grantor", "grantee", "instrument", "type", "recorded"]):
+                table = tbl
+                log.info("Table headers: %s", headers)
                 break
 
-        # Also try JSON results (some GovOS portals return JSON)
-        if not results_table:
-            records = self._parse_json_results(html)
-            if records:
-                return records
-            log.warning("No results table found")
+        if not table:
             return records
 
-        rows = results_table.find_all("tr")
+        rows = table.find_all("tr")
         if len(rows) < 2:
             return records
 
         headers = [th.get_text(strip=True).lower() for th in rows[0].find_all(["th", "td"])]
         col: dict[str, int] = {}
         for i, h in enumerate(headers):
-            if any(x in h for x in ["instrument", "instr", "doc #", "doc#", "number"]):
-                col.setdefault("doc_num",  i)
-            if any(x in h for x in ["type", "document type"]):
-                col.setdefault("doc_type", i)
-            if any(x in h for x in ["recorded", "filed", "date"]):
-                col.setdefault("filed",    i)
-            if "grantor" in h:
-                col.setdefault("grantor",  i)
-            if "grantee" in h:
-                col.setdefault("grantee",  i)
-            if any(x in h for x in ["consideration", "amount", "value"]):
-                col.setdefault("amount",   i)
-            if any(x in h for x in ["legal", "description"]):
-                col.setdefault("legal",    i)
-
-        log.info("Column map: %s", col)
+            if any(x in h for x in ["instrument", "doc #", "number"]): col.setdefault("doc_num",  i)
+            if "type" in h:                                              col.setdefault("doc_type", i)
+            if any(x in h for x in ["recorded", "filed", "date"]):     col.setdefault("filed",    i)
+            if "grantor" in h:                                           col.setdefault("grantor",  i)
+            if "grantee" in h:                                           col.setdefault("grantee",  i)
+            if any(x in h for x in ["amount", "consideration"]):        col.setdefault("amount",   i)
+            if "legal" in h:                                             col.setdefault("legal",    i)
 
         for row in rows[1:]:
             try:
@@ -688,109 +656,75 @@ class ClerkScraper:
                 if len(cells) < 2:
                     continue
 
-                def g(key: str, fallback: int) -> str:
-                    idx = col.get(key, fallback)
+                def g(k, fb):
+                    idx = col.get(k, fb)
                     return cells[idx] if 0 <= idx < len(cells) else ""
 
-                doc_num  = g("doc_num",  0)
                 raw_type = g("doc_type", 1)
-                filed    = g("filed",    2)
-                grantor  = g("grantor",  3)
-                grantee  = g("grantee",  4)
-                amount   = g("amount",   5)
-                legal    = g("legal",    6)
-
-                if not doc_num and not filed:
-                    continue
-
                 meta = _match_doc_type(raw_type)
                 if not meta:
                     continue
 
-                # Get direct link
-                clerk_url = f"{self.BASE}/search/index"
+                clerk_url = self.BASE
                 for a in row.find_all("a", href=True):
-                    href = a["href"]
-                    clerk_url = href if href.startswith("http") else f"{self.BASE}/{href.lstrip('/')}"
+                    h = a["href"]
+                    clerk_url = h if h.startswith("http") else f"{self.BASE}/{h.lstrip('/')}"
                     break
 
                 records.append({
-                    "doc_num":   doc_num,
-                    "doc_type":  meta["code"],
-                    "filed":     filed,
-                    "cat":       meta["cat"],
-                    "cat_label": meta["label"],
-                    "owner":     grantor,
-                    "grantee":   grantee,
-                    "amount":    amount,
-                    "legal":     legal,
-                    "clerk_url": clerk_url,
-                    # Address fields filled later by parcel lookup
-                    "prop_address": "",
-                    "prop_city":    "Dallas",
-                    "prop_state":   "TX",
-                    "prop_zip":     "",
-                    "mail_address": "",
-                    "mail_city":    "",
-                    "mail_state":   "TX",
-                    "mail_zip":     "",
-                })
-            except Exception as e:
-                log.warning("Row parse error: %s", e)
-                continue
-
-        return records
-
-    def _parse_json_results(self, html: str) -> list[dict]:
-        """Try to parse JSON embedded in page or returned as API response."""
-        records: list[dict] = []
-        try:
-            data = json.loads(html)
-            items = data if isinstance(data, list) else data.get("records", data.get("results", []))
-            for item in items:
-                if not isinstance(item, dict):
-                    continue
-                raw_type = str(item.get("docType") or item.get("documentType") or item.get("type") or "")
-                meta = _match_doc_type(raw_type)
-                if not meta:
-                    continue
-                doc_num = str(item.get("docNumber") or item.get("instrumentNumber") or item.get("id") or "")
-                records.append({
-                    "doc_num":      doc_num,
+                    "doc_num":      g("doc_num",  0),
                     "doc_type":     meta["code"],
-                    "filed":        str(item.get("recordedDate") or item.get("filedDate") or ""),
+                    "filed":        g("filed",    2),
                     "cat":          meta["cat"],
                     "cat_label":    meta["label"],
-                    "owner":        str(item.get("grantor") or item.get("owner") or ""),
-                    "grantee":      str(item.get("grantee") or ""),
-                    "amount":       str(item.get("amount") or item.get("consideration") or ""),
-                    "legal":        str(item.get("legalDescription") or item.get("legal") or ""),
-                    "clerk_url":    str(item.get("url") or item.get("link") or self.BASE),
-                    "prop_address": "", "prop_city": "Dallas", "prop_state": "TX", "prop_zip": "",
-                    "mail_address": "", "mail_city": "", "mail_state": "TX", "mail_zip": "",
+                    "owner":        g("grantor",  3),
+                    "grantee":      g("grantee",  4),
+                    "amount":       g("amount",   5),
+                    "legal":        g("legal",    6),
+                    "clerk_url":    clerk_url,
+                    "prop_address": "", "prop_city": "Dallas",
+                    "prop_state":   "TX", "prop_zip": "",
+                    "mail_address": "", "mail_city": "",
+                    "mail_state":   "TX", "mail_zip": "",
                 })
-        except (json.JSONDecodeError, Exception):
-            pass
+            except Exception as e:
+                log.warning("Row error: %s", e)
         return records
 
+    async def _next_page(self, page) -> bool:
+        for sel in [
+            'button:has-text("Next")', 'a:has-text("Next")',
+            '[aria-label="Next page"]', '[aria-label="next"]',
+            'button[title*="next" i]', '.pagination-next',
+        ]:
+            try:
+                btn = await page.query_selector(sel)
+                if btn:
+                    disabled = await btn.get_attribute("disabled")
+                    cls      = await btn.get_attribute("class") or ""
+                    if disabled or "disabled" in cls:
+                        return False
+                    await btn.click(timeout=10_000)
+                    await page.wait_for_load_state("networkidle", timeout=30_000)
+                    await page.wait_for_timeout(1500)
+                    return True
+            except Exception:
+                pass
+        return False
 
-# ─── ENRICH WITH PARCEL DATA ──────────────────────────────────────────────────
+
+# ─── SAVE & EXPORT ────────────────────────────────────────────────────────────
 
 def enrich_with_parcels(records: list[dict], parcel: ParcelLookup) -> list[dict]:
     matched = 0
     for rec in records:
-        owner = rec.get("owner", "")
-        if not owner:
-            continue
-        addr = parcel.lookup(owner)
+        addr = parcel.lookup(rec.get("owner", ""))
         if addr:
             rec.update(addr)
             matched += 1
-    log.info("Parcel match: %d / %d records enriched", matched, len(records))
+    log.info("Parcel enrichment: %d / %d matched", matched, len(records))
     return records
 
-
-# ─── SAVE & EXPORT ────────────────────────────────────────────────────────────
 
 def save_records(records: list[dict], date_from: str, date_to: str) -> list[dict]:
     enriched = []
@@ -799,15 +733,12 @@ def save_records(records: list[dict], date_from: str, date_to: str) -> list[dict
             flags, score = compute_score(rec)
             rec["flags"] = flags
             rec["score"] = score
-            enriched.append(rec)
-        except Exception as e:
-            log.warning("Score error for record %s: %s", rec.get("doc_num"), e)
+        except Exception:
             rec["flags"] = []
             rec["score"] = 30
-            enriched.append(rec)
+        enriched.append(rec)
 
     enriched.sort(key=lambda r: r.get("score", 0), reverse=True)
-
     payload = {
         "fetched_at":   datetime.utcnow().isoformat() + "Z",
         "source":       "Dallas County Clerk — Official Public Records",
@@ -816,12 +747,10 @@ def save_records(records: list[dict], date_from: str, date_to: str) -> list[dict
         "with_address": sum(1 for r in enriched if r.get("prop_address")),
         "records":      enriched,
     }
-
     for path in OUTPUT_PATHS:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(payload, indent=2, default=str), encoding="utf-8")
         log.info("Saved %d records → %s", len(enriched), path)
-
     return enriched
 
 
@@ -838,8 +767,6 @@ def export_ghl_csv(records: list[dict], path: Path):
         for rec in records:
             try:
                 first, last = split_name(rec.get("owner", ""))
-                flags = rec.get("flags", [])
-                score = rec.get("score", 30)
                 writer.writerow({
                     "First Name":             first,
                     "Last Name":              last,
@@ -856,8 +783,8 @@ def export_ghl_csv(records: list[dict], path: Path):
                     "Date Filed":             rec.get("filed", ""),
                     "Document Number":        rec.get("doc_num", ""),
                     "Amount/Debt Owed":       rec.get("amount", ""),
-                    "Seller Score":           score,
-                    "Motivated Seller Flags": "; ".join(flags),
+                    "Seller Score":           rec.get("score", 30),
+                    "Motivated Seller Flags": "; ".join(rec.get("flags", [])),
                     "Source":                 "Dallas County Clerk",
                     "Public Records URL":     rec.get("clerk_url", ""),
                 })
@@ -878,22 +805,15 @@ async def main():
     log.info("Date range: %s – %s", date_from, date_to)
     log.info("=" * 50)
 
-    # Step 1: Load parcel data for address enrichment
     parcel = ParcelLookup()
     parcel.load()
 
-    # Step 2: Scrape clerk portal
-    scraper = ClerkScraper()
-    raw = await scraper.fetch_all(date_from, date_to)
-    log.info("Total raw records fetched: %d", len(raw))
+    scraper  = ClerkScraper()
+    raw      = await scraper.fetch_all(date_from, date_to)
+    log.info("Raw records: %d", len(raw))
 
-    # Step 3: Enrich with parcel addresses
-    raw = enrich_with_parcels(raw, parcel)
-
-    # Step 4: Score and save
+    raw      = enrich_with_parcels(raw, parcel)
     enriched = save_records(raw, date_from, date_to)
-
-    # Step 5: Export GHL CSV
     export_ghl_csv(enriched, GHL_CSV_PATH)
 
     log.info("=" * 50)
