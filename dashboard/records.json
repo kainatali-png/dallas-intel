@@ -1,36 +1,11 @@
 {
-  "fetched_at": "2026-04-10T10:38:22.237511Z",
+  "fetched_at": "2026-04-10T14:16:33.134907Z",
   "source": "Dallas County Clerk \u2014 Official Public Records",
   "date_range": {
     "from": "04/03/2026",
     "to": "04/10/2026"
   },
-  "total": 1,
+  "total": 0,
   "with_address": 0,
-  "records": [
-    {
-      "doc_num": "200101412293",
-      "doc_type": "JUD",
-      "filed": "6/8/2001",
-      "cat": "judgment",
-      "cat_label": "Judgment",
-      "owner": "TEXAS STATE",
-      "grantee": "AHMED ALTAF",
-      "amount": "ABSTRACT OF JUDGMENT",
-      "legal": "N/A",
-      "clerk_url": "https://dallas.tx.ds.search.govos.com",
-      "prop_address": "",
-      "prop_city": "Dallas",
-      "prop_state": "TX",
-      "prop_zip": "",
-      "mail_address": "",
-      "mail_city": "",
-      "mail_state": "TX",
-      "mail_zip": "",
-      "flags": [
-        "Judgment lien"
-      ],
-      "score": 40
-    }
-  ]
+  "records": []
 }
