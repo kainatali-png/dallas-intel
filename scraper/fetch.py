@@ -147,6 +147,17 @@ class ClerkScraper:
 
     BASE = "https://dallas.tx.ds.search.govos.com"
 
+    # Search directly via URL — the portal URL reveals the exact format
+    # From logs: /results?department=RP&recordedDateRange=20010129%2C20260116&searchType=advancedSearch
+    # We just need to build the correct URL with our date range
+    SEARCH_URL = (
+        "https://dallas.tx.ds.search.govos.com/results?"
+        "department=RP"
+        "&recordedDateRange={date_from}%2C{date_to}"
+        "&searchType=advancedSearch"
+        "&docTypes={doc_types}"
+    )
+
     async def fetch_all(self, date_from: str, date_to: str) -> list[dict]:
         records: list[dict] = []
         async with async_playwright() as pw:
@@ -180,177 +191,60 @@ class ClerkScraper:
     async def _scrape(self, page, date_from: str, date_to: str) -> list[dict]:
         records: list[dict] = []
 
-        # Step 1 — Load portal
-        log.info("Loading portal...")
-        await page.goto(CLERK_URL, wait_until="domcontentloaded", timeout=60_000)
-        await page.wait_for_timeout(4000)
-
-        # Step 2 — Dismiss popups
-        for sel in ['[aria-label="Close"]', 'button:has-text("Close")',
-                    'button:has-text("No thanks")', '.modal-close']:
-            try:
-                await page.click(sel, timeout=2000)
-                log.info("Dismissed popup: %s", sel)
-            except Exception:
-                pass
-
-        await page.screenshot(path="/tmp/step1_home.png")
-        log.info("Title: %s", await page.title())
-
-        # Step 3 — Click Advanced Search
-        log.info("Clicking Advanced Search...")
-        for sel in ['a:has-text("Advanced Search")', 'span:has-text("Advanced Search")',
-                    'button:has-text("Advanced")']:
-            try:
-                await page.click(sel, timeout=5000)
-                await page.wait_for_timeout(3000)
-                log.info("Clicked Advanced Search")
-                break
-            except Exception:
-                pass
-
-        await page.screenshot(path="/tmp/step2_advanced.png")
-
-        # Step 4 — Fill date range using EXACT IDs from the logs
-        # Logs showed: id=recordedDateRange-start and id=recordedDateRange-end
+        # Convert dates to YYYYMMDD format used in the URL
         dt_from = datetime.strptime(date_from, "%m/%d/%Y")
         dt_to   = datetime.strptime(date_to,   "%m/%d/%Y")
-        fmt_from = f"{dt_from.month}/{dt_from.day}/{dt_from.year}"
-        fmt_to   = f"{dt_to.month}/{dt_to.day}/{dt_to.year}"
-        log.info("Filling dates: %s → %s", fmt_from, fmt_to)
+        url_from = dt_from.strftime("%Y%m%d")
+        url_to   = dt_to.strftime("%Y%m%d")
 
-        date_filled = False
-        try:
-            start_el = await page.wait_for_selector(
-                "#recordedDateRange-start", timeout=10_000
-            )
-            end_el = await page.query_selector("#recordedDateRange-end")
-            if start_el and end_el:
-                await start_el.triple_click()
-                await page.wait_for_timeout(200)
-                await start_el.type(fmt_from, delay=80)
-                log.info("Filled start date: %s", fmt_from)
+        log.info("Date range: %s → %s (URL format: %s → %s)",
+                 date_from, date_to, url_from, url_to)
 
-                await end_el.triple_click()
-                await page.wait_for_timeout(200)
-                await end_el.type(fmt_to, delay=80)
-                log.info("Filled end date: %s", fmt_to)
-                date_filled = True
-        except Exception as e:
-            log.warning("Date fill with exact IDs failed: %s", e)
+        # Build search URL with our exact date range
+        # No doc type filter first — get ALL records in date range, filter after
+        search_url = (
+            f"{self.BASE}/results?"
+            f"department=RP"
+            f"&recordedDateRange={url_from}%2C{url_to}"
+            f"&searchType=advancedSearch"
+        )
 
-        if not date_filled:
-            log.warning("Trying fallback date selectors...")
-            for s, e in [("#dateRangeStart","#dateRangeEnd"),
-                         ('[placeholder*="start" i]','[placeholder*="end" i]')]:
-                try:
-                    se = await page.query_selector(s)
-                    ee = await page.query_selector(e)
-                    if se and ee:
-                        await se.triple_click()
-                        await se.type(fmt_from, delay=80)
-                        await ee.triple_click()
-                        await ee.type(fmt_to, delay=80)
-                        date_filled = True
-                        log.info("Dates filled via fallback: %s", s)
-                        break
-                except Exception:
-                    pass
+        log.info("Loading search URL: %s", search_url)
+        await page.goto(search_url, wait_until="domcontentloaded", timeout=60_000)
+        await page.wait_for_timeout(5000)
 
-        await page.screenshot(path="/tmp/step3_dates_filled.png")
-
-        # Step 5 — Add each doc type using the docTypes-input field
-        # Logs showed: id=docTypes-input placeholder=Filter Document Types
-        log.info("Adding document type filters...")
-        doc_types_to_search = [
-            "LIS PENDENS", "NOTICE OF FORECLOSURE", "JUDGMENT",
-            "LIEN", "IRS LIEN", "TAX DEED", "PROBATE",
-            "MECHANIC LIEN", "HOA LIEN", "FEDERAL LIEN",
-        ]
-        try:
-            doc_input = await page.query_selector("#docTypes-input")
-            if doc_input:
-                for dtype in doc_types_to_search:
-                    try:
-                        await doc_input.click()
-                        await doc_input.fill(dtype)
-                        await page.wait_for_timeout(1000)
-                        # Click first suggestion in dropdown
-                        for drop_sel in [
-                            '[role="option"]:first-child',
-                            '.autocomplete-suggestion:first-child',
-                            'li[role="option"]:first-child',
-                            'ul[role="listbox"] li:first-child',
-                        ]:
-                            try:
-                                await page.click(drop_sel, timeout=2000)
-                                log.info("Selected doc type: %s", dtype)
-                                await page.wait_for_timeout(500)
-                                break
-                            except Exception:
-                                pass
-                    except Exception as e:
-                        log.warning("Doc type '%s' failed: %s", dtype, e)
-            else:
-                log.warning("docTypes-input not found")
-        except Exception as e:
-            log.warning("Doc type filter error: %s", e)
-
-        await page.screenshot(path="/tmp/step4_doctypes.png")
-
-        # Step 6 — Submit search
-        log.info("Submitting search...")
-        submitted = False
-        for sel in ['button:has-text("Search")', '#searchBtn',
-                    'button[type="submit"]', 'input[type="submit"]']:
+        # Dismiss any popup
+        for sel in ['[aria-label="Close"]', 'button:has-text("Close")',
+                    'button:has-text("No thanks")']:
             try:
-                await page.click(sel, timeout=5000)
-                await page.wait_for_load_state("networkidle", timeout=30_000)
-                await page.wait_for_timeout(3000)
-                log.info("Search submitted via: %s", sel)
-                submitted = True
-                break
+                await page.click(sel, timeout=2000)
             except Exception:
                 pass
 
-        if not submitted:
-            log.warning("Submit button not found — trying Enter key")
-            await page.keyboard.press("Enter")
-            await page.wait_for_timeout(5000)
+        await page.screenshot(path="/tmp/results_page.png")
+        log.info("URL loaded: %s", page.url)
+        log.info("Title: %s", await page.title())
 
-        await page.screenshot(path="/tmp/step5_results.png")
-        log.info("URL after search: %s", page.url)
-
-        # Step 7 — Extract results
+        # Collect all pages
         page_num = 1
         while True:
             html = await page.content()
-            log.info("Page %d HTML length: %d", page_num, len(html))
+            log.info("Page %d — HTML length: %d chars", page_num, len(html))
 
-            # Try table parse first
             page_records = self._parse_table(html)
-
-            # Try React/card parse if no table
-            if not page_records:
-                page_records = await self._parse_react(page)
-
-            # Log raw HTML snippet to see what's there
-            if not page_records:
-                log.warning("No records on page %d — HTML preview:", page_num)
-                soup = BeautifulSoup(html, "lxml")
-                body_text = soup.get_text()[:1000]
-                log.info("Body text: %s", body_text)
-
             records.extend(page_records)
             log.info("Page %d: %d records (total: %d)",
                      page_num, len(page_records), len(records))
 
             if not page_records:
+                # Log body text to understand what's on the page
+                soup = BeautifulSoup(html, "lxml")
+                log.info("Page text preview: %s", soup.get_text()[:800])
                 break
 
-            # Next page
             has_next = await self._next_page(page)
             if not has_next:
+                log.info("No more pages")
                 break
             page_num += 1
             await page.wait_for_timeout(2000)
@@ -364,41 +258,68 @@ class ClerkScraper:
 
         for tbl in soup.find_all("table"):
             headers = [th.get_text(strip=True).lower() for th in tbl.find_all("th")]
-            if any(h in headers for h in ["grantor","grantee","instrument","type","recorded"]):
+            if any(h in headers for h in ["grantor","grantee","doc type","recorded date","doc number"]):
                 table = tbl
-                log.info("Table found, headers: %s", headers)
+                log.info("Table headers: %s", headers)
                 break
 
         if not table:
+            log.warning("No results table found")
             return records
 
         rows = table.find_all("tr")
         if len(rows) < 2:
             return records
 
+        # Map headers to column indices
         headers = [th.get_text(strip=True).lower() for th in rows[0].find_all(["th","td"])]
         col: dict[str, int] = {}
         for i, h in enumerate(headers):
-            if any(x in h for x in ["instrument","doc #","number"]): col.setdefault("doc_num",  i)
-            if "type" in h:                                            col.setdefault("doc_type", i)
-            if any(x in h for x in ["recorded","filed","date"]):      col.setdefault("filed",    i)
-            if "grantor" in h:                                         col.setdefault("grantor",  i)
-            if "grantee" in h:                                         col.setdefault("grantee",  i)
-            if any(x in h for x in ["amount","consideration"]):        col.setdefault("amount",   i)
-            if "legal" in h:                                           col.setdefault("legal",    i)
+            if any(x in h for x in ["doc number","instrument","doc #"]): col.setdefault("doc_num",  i)
+            if "doc type" in h or h == "type":                            col.setdefault("doc_type", i)
+            if "recorded" in h or "filed" in h:                          col.setdefault("filed",    i)
+            if "grantor" in h:                                            col.setdefault("grantor",  i)
+            if "grantee" in h:                                            col.setdefault("grantee",  i)
+            if "amount" in h or "consideration" in h:                    col.setdefault("amount",   i)
+            if "legal" in h:                                              col.setdefault("legal",    i)
+            if "town" in h or "city" in h:                               col.setdefault("town",     i)
+            if "address" in h:                                            col.setdefault("address",  i)
+
+        log.info("Column map: %s", col)
 
         for row in rows[1:]:
             try:
                 cells = [td.get_text(strip=True) for td in row.find_all(["td","th"])]
-                if len(cells) < 2: continue
-                def g(k,fb): idx=col.get(k,fb); return cells[idx] if 0<=idx<len(cells) else ""
-                meta = _match_doc_type(g("doc_type",1))
-                if not meta: continue
+                if len(cells) < 2:
+                    continue
+
+                def g(k, fb):
+                    idx = col.get(k, fb)
+                    return cells[idx] if 0 <= idx < len(cells) else ""
+
+                raw_type = g("doc_type", 1)
+                meta = _match_doc_type(raw_type)
+                if not meta:
+                    # Log skipped types so we can add them
+                    if raw_type:
+                        log.info("Skipped doc type: %s", raw_type)
+                    continue
+
+                # Get direct link to document
                 clerk_url = self.BASE
                 for a in row.find_all("a", href=True):
                     h = a["href"]
                     clerk_url = h if h.startswith("http") else f"{self.BASE}/{h.lstrip('/')}"
                     break
+
+                # Extract property address from legal description or address column
+                legal       = g("legal",   -1)
+                prop_addr   = g("address", -1)
+                town        = g("town",    -1)
+
+                # Try to parse street address from legal description
+                street = self._extract_address(legal) if not prop_addr else prop_addr
+
                 records.append({
                     "doc_num":      g("doc_num",  0),
                     "doc_type":     meta["code"],
@@ -408,77 +329,52 @@ class ClerkScraper:
                     "owner":        g("grantor",  3),
                     "grantee":      g("grantee",  4),
                     "amount":       g("amount",   5),
-                    "legal":        g("legal",    6),
+                    "legal":        legal,
                     "clerk_url":    clerk_url,
-                    "prop_address": "", "prop_city": "Dallas",
-                    "prop_state":   "TX", "prop_zip": "",
-                    "mail_address": "", "mail_city": "",
-                    "mail_state":   "TX", "mail_zip": "",
+                    "prop_address": street,
+                    "prop_city":    town or "Dallas",
+                    "prop_state":   "TX",
+                    "prop_zip":     "",
+                    "mail_address": "",
+                    "mail_city":    "",
+                    "mail_state":   "TX",
+                    "mail_zip":     "",
                 })
             except Exception as e:
-                log.warning("Row error: %s", e)
+                log.warning("Row parse error: %s", e)
+
+        log.info("Parsed %d matching records from table", len(records))
         return records
 
-    async def _parse_react(self, page) -> list[dict]:
-        records: list[dict] = []
-        try:
-            # GovOS renders results as list items with data attributes
-            items = await page.query_selector_all(
-                '[class*="result"], [class*="record"], [class*="SearchResult"], '
-                '[data-testid*="result"], tr[class*="row"], .search-result-item'
-            )
-            log.info("React items found: %d", len(items))
-            for item in items:
-                try:
-                    text = await item.inner_text()
-                    lines = [l.strip() for l in text.split("\n") if l.strip()]
-                    if len(lines) < 2: continue
-                    full = " ".join(lines).upper()
-                    meta = None
-                    for line in lines:
-                        meta = _match_doc_type(line)
-                        if meta: break
-                    if not meta: continue
-                    clerk_url = self.BASE
-                    for a in await item.query_selector_all("a[href]"):
-                        href = await a.get_attribute("href") or ""
-                        if href:
-                            clerk_url = href if href.startswith("http") else f"{self.BASE}{href}"
-                            break
-                    date_m  = re.search(r"\b(\d{1,2}/\d{1,2}/\d{4})\b", full)
-                    amt_m   = re.search(r"\$[\d,]+\.?\d*", full)
-                    records.append({
-                        "doc_num":      lines[0],
-                        "doc_type":     meta["code"],
-                        "filed":        date_m.group(1) if date_m else "",
-                        "cat":          meta["cat"],
-                        "cat_label":    meta["label"],
-                        "owner":        lines[1] if len(lines) > 1 else "",
-                        "grantee":      lines[2] if len(lines) > 2 else "",
-                        "amount":       amt_m.group(0) if amt_m else "",
-                        "legal":        "",
-                        "clerk_url":    clerk_url,
-                        "prop_address": "", "prop_city": "Dallas",
-                        "prop_state":   "TX", "prop_zip": "",
-                        "mail_address": "", "mail_city": "",
-                        "mail_state":   "TX", "mail_zip": "",
-                    })
-                except Exception:
-                    continue
-        except Exception as e:
-            log.warning("React parse error: %s", e)
-        return records
+    def _extract_address(self, legal: str) -> str:
+        """Try to extract a street address from a legal description."""
+        if not legal:
+            return ""
+        # Match patterns like "123 MAIN ST" or "456 ELM AVE"
+        m = re.search(
+            r"\b(\d+\s+[A-Z][A-Z0-9\s]{2,30}"
+            r"(?:ST|AVE|BLVD|DR|LN|RD|CT|WAY|PL|TRL|CIR|HWY)\b)",
+            legal.upper()
+        )
+        return m.group(1).strip() if m else ""
 
     async def _next_page(self, page) -> bool:
-        for sel in ['button:has-text("Next")', 'a:has-text("Next")',
-                    '[aria-label="Next page"]', '[aria-label="next"]',
-                    'button[title*="next" i]']:
+        for sel in [
+            'button:has-text("Next")',
+            'a:has-text("Next")',
+            '[aria-label="Next page"]',
+            '[aria-label="next"]',
+            'button[title*="next" i]',
+            '.pagination-next',
+            '[data-testid*="next"]',
+        ]:
             try:
                 btn = await page.query_selector(sel)
                 if btn:
                     disabled = await btn.get_attribute("disabled")
                     cls      = await btn.get_attribute("class") or ""
-                    if disabled or "disabled" in cls: return False
+                    if disabled or "disabled" in cls:
+                        return False
                     await btn.click(timeout=10_000)
                     await page.wait_for_load_state("networkidle", timeout=30_000)
                     await page.wait_for_timeout(1500)
